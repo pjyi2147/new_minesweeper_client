@@ -3,7 +3,7 @@ project (minesweeper_client)
 
 find_package(Boost REQUIRED COMPONENTS system)
 
-file(GLOB MAIN src/*.cpp)
+file(GLOB MAIN src/main.cpp)
 file(GLOB COMMON src/common/*.cpp)
 file(GLOB CLIENT src/client/*.cpp)
 
