@@ -30,6 +30,9 @@ void Update(MineSweeper* m, json from_server_json) {
       m_row != from_server_json["row"] ||
       m->getMineNum() != from_server_json["mine_num"]) {
     
+    cout << "The server's configuration" 
+         << "is different with client's!" << endl;
+    cout << "Following server's configuration" << endl;
     Setup(m, from_server_json);
 
     return;

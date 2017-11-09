@@ -1,5 +1,7 @@
 #include <iostream>
-#include <boost/thread/thread.hpp>
+#include <thread>
+#include <vector>
+#include <string> 
 
 #include "common/json.hpp"
 #include "common/minesweeper.h"
@@ -11,9 +13,9 @@ using json = nlohmann::json;
 
 void GameLoop(MineSweeper* m, json* to_server_json) {
   while(!m->isGameEnd()) {
-    // AI(m, to_server_json);
+    AI(m, to_server_json);
+    this_thread::sleep_for(20ms);
     Transfer(m, *to_server_json);
-
     m->PrintMineField();
   }
 }
@@ -58,18 +60,25 @@ int main() {
   
   MineSweeper minesweeper(m_col, m_row, m_mine_num);
 
-  vector<string> scripts = {"E 0 0"};
+  string start_script = "E " + to_string(int(m_col / 2)) 
+    + " " + to_string(int(m_row / 2));
+  vector<std::string> scripts;
+
+  scripts.push_back(start_script);
 
   to_server_json["row"] = m_row;
   to_server_json["col"] = m_col;
   to_server_json["mine_num"] = m_mine_num;
   to_server_json["scripts"] = scripts;
-  GameLoop(&minesweeper, &to_server_json);
+  
+  Transfer(&minesweeper, to_server_json);
   
   minesweeper.PrintMineField();
+  
+  GameLoop(&minesweeper, &to_server_json);
+  
   // @TODO: add statistics here
-  /*
-  if (to_server_json["win"])
+  if (minesweeper.isWin())
   {
     cout << "won!" << endl;
   }
@@ -77,7 +86,7 @@ int main() {
   {
     cout << "lost..." << endl;
   }
-  */
+
   cin.ignore();
   cin.get();
   return 0;
