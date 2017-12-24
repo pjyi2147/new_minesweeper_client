@@ -95,7 +95,12 @@ void RandomGuess(MineSweeper* m, std::vector<string>* scripts) {
   auto empty_tiles = m->getUntouchedTiles();
   int mine_num = m->getMineNum();
   int num_flags = m->CountAllFlagged();
-
+  
+  if (empty_tiles.empty()) {
+    cout << "There is no tile to guess. Skipping..." << endl;
+    return;
+  }
+  
   srand(time(NULL));
   int random_empty_tile = empty_tiles[rand() % empty_tiles.size()];
   int col = random_empty_tile % m->getCol();
@@ -189,8 +194,8 @@ vector<vector<int>> GetConnectedBorderTiles(MineSweeper* m) {
       section.push_back(current_tile);
       finished_tiles.push_back(current_tile);
 
-      for (auto tile: border_tiles) {
-        int t_col = tile % m_col, t_row = tile / m_row; 
+      for (auto& tile: border_tiles) {
+        int t_col = tile % m_col, t_row = tile / m_col; 
 
         bool is_connected = false;
 
@@ -207,10 +212,11 @@ vector<vector<int>> GetConnectedBorderTiles(MineSweeper* m) {
                 if (abs(cur_col - c) <= 1 && abs(cur_row - r) <= 1
                     && abs(t_col - c) <= 1 && abs(t_row - r) <= 1) {
                   is_connected = true;
-                  break;
                 }
               }
+              if (is_connected) break;
             }
+            if (is_connected) break;
           }
         }
 
@@ -238,7 +244,7 @@ vector<vector<vector<int>>> GetGroupedBorderTiles(MineSweeper* m) {
   // get connected_border_tiles
   auto connected_border_tiles = GetConnectedBorderTiles(m);
 
-  for (auto& section : connected_border_tiles) {
+  for (auto section : connected_border_tiles) {
     // a grouped section will be stored here
     vector<vector<int>> grouped_section;
     
@@ -274,6 +280,146 @@ vector<vector<vector<int>>> GetGroupedBorderTiles(MineSweeper* m) {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+void GroupedSectionSolFinder(MineSweeper* m, vector<vector<int>> section,
+  vector<vector<int>>* section_sol, vector<int>* group_sol, int depth) {
+
+  int m_col = m->getCol(), m_row = m->getRow();
+
+  // excaper
+  if (depth == section.size()) {
+    for (auto& group : section) {
+      int tile = group[0];
+      int t_row = tile / m_col, t_col = tile % m_col;
+
+      auto revealed_tiles = m->getRevealedNeighborsTile(t_col, t_row);
+
+      for (auto& r_tile : revealed_tiles) {
+        int r_t_row = r_tile / m_col, r_t_col = r_tile % m_col;
+
+        if (m->CountFlagTile(r_t_col, r_t_row) 
+            != m->getNeighborCountTile(r_t_col, r_t_row)) {
+          return;
+        }
+      }
+    }
+    // if we dont have the function returned
+    // then we have a solution.
+    section_sol->push_back(*group_sol);
+  }
+  // recurser
+  else {
+    // check there are more flags than it supposed to
+    // we treat one group as one tile 
+    // so it is sufficient to just check the first tile
+    for (auto& group : section) {
+      int tile = group[0];
+      int t_row = tile / m_col, t_col = tile % m_col;
+
+      auto revealed_tiles = m->getRevealedNeighborsTile(t_col, t_row);
+      for (auto& r_tile : revealed_tiles)  {
+        int r_t_col = r_tile % m_col, r_t_row = r_tile / m_col;
+        int count_f = m->CountFlagTile(r_t_col, r_t_row);
+        int count_n = m->getNeighborCountTile(r_t_col, r_t_row);
+        
+        if (count_f > count_n) {
+          return;
+        }
+      }
+    }
+
+    auto group_1 = section[depth];
+
+    for (int mine_count = 0; mine_count < group_1.size() + 1; ++mine_count) {
+      if (mine_count == 0) {
+        group_sol->push_back(mine_count);
+        GroupedSectionSolFinder(m, section, section_sol, 
+                                group_sol, depth + 1);
+        
+        group_sol->pop_back();
+      }
+      else {
+        int tile_1 = group_1[mine_count - 1];
+        int t_1_row = tile_1 / m_col, t_1_col = tile_1 % m_col;
+
+        m->setFlagTile(t_1_col, t_1_row, true);
+
+        group_sol->push_back(mine_count);
+        
+        GroupedSectionSolFinder(m, section, section_sol, 
+                                group_sol, depth + 1);
+        
+        group_sol->pop_back();
+
+        // when finished, we have to clean it up
+        // flag triggered
+        if (mine_count == group_1.size()) {
+          for (int k = 0; k < group_1.size(); ++k) {
+            int tilek = group_1[k];
+            int t_k_row = tilek / m_col, t_k_col = tilek % m_col;
+            m->setFlagTile(t_k_col, t_k_row, false);
+          }
+        }
+      }
+    }
+  }
+}
+
+vector<vector<vector<int>>> GroupSolFinder(MineSweeper* m) {
+
+  vector<vector<vector<int>>> grouped_total_sol;
+  auto grouped_tiles = GetGroupedBorderTiles(m);
+  MineSweeper m_copy(*m);
+
+  for (auto& section : grouped_tiles) {
+
+    cout << "section size: " << section.size() << endl;
+
+    if (section.size() > 30) {
+      cout << "  section size is bigger than 30." << endl
+          << "  skipping..." << endl;
+    }
+    else {
+      vector<vector<int>> section_sol;
+      vector<int> group_sol;
+      GroupedSectionSolFinder(&m_copy, section, &section_sol, &group_sol, 0);
+
+      grouped_total_sol.push_back(section_sol);
+      group_sol.clear();
+    }
+  }
+  return grouped_total_sol;
+}
+
+void GroupSolver(MineSweeper* m, nlohmann::json* to_server_json) {
+  auto solution = GroupSolFinder(m);
+  auto grouped_tiles = GetGroupedBorderTiles(m); 
+  int m_col = m->getCol(), m_row = m->getRow();
+
+  map<int, double> prob_store;
+
+
+
+
+
+}
+
+
+
+
+
+
+
 void AI(MineSweeper* m, json* to_server_json) {
   vector<string> scripts;
 
@@ -281,6 +427,8 @@ void AI(MineSweeper* m, json* to_server_json) {
   BasicDoubleClicking(m, &scripts);
 
   if (scripts.size() == 0) {
+    auto solution = GroupSolFinder(m);
+
     cout << "Guesses start..." << endl;
     RandomGuess(m, &scripts);
     // @TODO: Implement BruteSolver

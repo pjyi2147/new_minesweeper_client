@@ -13,5 +13,14 @@ std::vector<int> GetBorderTiles(MineSweeper*);
 std::vector<std::vector<int>> GetConnectedBorderTiles(MineSweeper*);
 std::vector<std::vector<std::vector<int>>> GetGroupedBorderTiles(MineSweeper*);
 
+void GroupedSectionSolFinder(MineSweeper* m, 
+                             std::vector<std::vector<int>> section,
+                             std::vector<std::vector<int>>* section_sol, 
+                             std::vector<int>* group_sol, 
+                             int depth);
+std::vector<std::vector<std::vector<int>>> GroupSolFinder(MineSweeper* m);
+
+void GroupSolver(MineSweeper* m, nlohmann::json*);
+
 
 void AI(MineSweeper* m, nlohmann::json*);
