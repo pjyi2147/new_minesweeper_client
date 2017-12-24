@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <ctime>
+#include <math.h>
 
 #include "../common/minesweeper.h"
 #include "../common/json.hpp"
@@ -36,6 +37,20 @@ string FlagClick(int col, int row)
     stringstream s;
     s << "F " << to_string(col) << " " << to_string(row);
     return s.str();
+}
+
+unsigned NCK( unsigned n, unsigned k )
+{
+    if (k > n) return 0;
+    if (k * 2 > n) k = n-k;
+    if (k == 0) return 1;
+
+    int result = n;
+    for( int i = 2; i <= k; ++i ) {
+        result *= (n-i+1);
+        result /= i;
+    }
+    return result;
 }
 
 
@@ -100,7 +115,7 @@ void RandomGuess(MineSweeper* m, std::vector<string>* scripts) {
     cout << "There is no tile to guess. Skipping..." << endl;
     return;
   }
-  
+
   srand(time(NULL));
   int random_empty_tile = empty_tiles[rand() % empty_tiles.size()];
   int col = random_empty_tile % m->getCol();
@@ -401,20 +416,122 @@ vector<vector<vector<int>>> GroupSolFinder(MineSweeper* m) {
   return grouped_total_sol;
 }
 
-void GroupSolver(MineSweeper* m, nlohmann::json* to_server_json) {
+map<int, double> GroupProbCal(MineSweeper* m) {
   auto solution = GroupSolFinder(m);
   auto grouped_tiles = GetGroupedBorderTiles(m); 
+  double random_prob = double(m->getMineNum() - m->CountAllFlagged())
+                        / double(m->getUntouchedTiles().size());
   int m_col = m->getCol(), m_row = m->getRow();
 
   map<int, double> prob_store;
+  
+  for (int section_c = 0; section_c < solution.size(); ++section_c) {
+    auto cur_section_sol = solution[section_c];
 
+    vector<double> group_prob;
+    double group_prob_sum = 0;
 
+    for (int sol_c = 0; sol_c < cur_section_sol.size(); ++sol_c) {
+      auto one_section_sol = cur_section_sol[sol_c];
+      double cur_section_prob = 1;
 
+      for (int group_c = 0; group_c < one_section_sol.size(); ++group_c) {
+        auto cur_group_sol = one_section_sol[group_c];
+        int cur_group_size = grouped_tiles[section_c][group_c].size();
 
+        cur_section_prob *= NCK(cur_group_size, cur_group_sol);
 
+        int pmp = 0;
+        while (pmp < cur_group_size)
+        {
+          if (pmp < cur_group_sol) cur_section_prob *= random_prob;
+          else cur_section_prob *= double(1 - random_prob);
+          ++pmp;
+        }
+      }
+      // @TODO:
+      // cur_section is 0 since there too many 
+      // multiplication of random_prob
+      // use log!!! 
+      group_prob.push_back(cur_section_prob);
+      group_prob_sum += cur_section_prob;
+    }
+
+    for (int sol_c = 0; sol_c < cur_section_sol.size(); ++sol_c) {
+      auto one_section_sol = cur_section_sol[sol_c];
+
+      for (int group_c = 0; group_c < one_section_sol.size(); ++group_c) {
+        auto cur_group_sol = one_section_sol[group_c];
+        int cur_group_size = grouped_tiles[section_c][group_c].size();
+
+        if (cur_group_sol == 0) {
+          for (int tile : grouped_tiles[section_c][group_c]) {
+            auto tile_iterator = prob_store.find(tile);
+            if (tile_iterator == prob_store.end()) {
+              prob_store[tile] = 0;
+            }
+          }
+        }
+        else {
+          for (int tile : grouped_tiles[section_c][group_c]) {
+            auto tile_iterator = prob_store.find(tile);
+            if (tile_iterator == prob_store.end()) {
+              prob_store[tile] = group_prob[sol_c] * double(cur_group_sol)
+                                  / double(cur_group_size) 
+                                  / group_prob_sum;
+            }
+            else {
+              prob_store[tile] += group_prob[sol_c] * double(cur_group_sol)
+                                  / double(cur_group_size) 
+                                  / group_prob_sum;
+            }
+          }
+        }
+      }
+    }
+  }
+  return prob_store;
 }
 
 
+void GroupSolver(MineSweeper* m, vector<string>* scripts) {
+  int m_col = m->getCol(), m_row = m->getRow();
+  auto prob_store = GroupProbCal(m);
+  double random_prob = double(m->getMineNum() - m->CountAllFlagged())
+                        / double(m->getUntouchedTiles().size());
+  
+  auto min_val = min_element(prob_store.begin(), prob_store.end(),
+                      [](auto l, auto r) -> bool { return l.second < r.second; });
+
+
+  if (min_val->second == 0) {
+    for (auto p : prob_store) {
+      if (p.second == 0) {
+        int t_col = p.first % m_col, t_row = p.first / m_col;
+    
+        std::cout << "AI chosed Col: " << t_col << " Row: "
+                        << t_row << " with the chance of "
+                        << p.second * 100 << "%"
+                        << " the tile being mine" << std::endl;
+        scripts->push_back(SimpleClick(t_col, t_row));
+      }
+    }
+  }
+  else if (min_val->second > random_prob) {
+    cout << "AI guesses a random tile since all the probability is"
+        << "bigger than random_prob" << endl;
+    RandomGuess(m, scripts);
+  }
+  else {
+    int t_col = min_val->first % m_col, t_row = min_val->first / m_col;
+    
+    std::cout << "AI chosed Col: " << t_col << " Row: "
+              << t_row << " with the chance of "
+              << min_val->second * 100 << "%"
+              << " the tile being mine" << std::endl;
+    scripts->push_back(SimpleClick(t_col, t_row));
+  }
+}
 
 
 
@@ -427,11 +544,7 @@ void AI(MineSweeper* m, json* to_server_json) {
   BasicDoubleClicking(m, &scripts);
 
   if (scripts.size() == 0) {
-    auto solution = GroupSolFinder(m);
-
-    cout << "Guesses start..." << endl;
-    RandomGuess(m, &scripts);
-    // @TODO: Implement BruteSolver
+    GroupSolver(m, &scripts);
   }
 
   (*to_server_json)["scripts"] = scripts;

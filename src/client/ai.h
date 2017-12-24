@@ -4,6 +4,8 @@ string SimpleClick(int col, int row);
 string DoubleClick(int col, int row);
 string FlagClick(int col, int row);
 
+unsigned NCK( unsigned n, unsigned k );
+
 void BasicFlagging(MineSweeper* m, std::vector<string>* scripts);
 void BasicDoubleClicking(MineSweeper* m, std::vector<string>* scripts);
 
@@ -20,7 +22,8 @@ void GroupedSectionSolFinder(MineSweeper* m,
                              int depth);
 std::vector<std::vector<std::vector<int>>> GroupSolFinder(MineSweeper* m);
 
-void GroupSolver(MineSweeper* m, nlohmann::json*);
+std::map<int, double> GroupProbCal(MineSweeper* m);
+void GroupSolver(MineSweeper* m, vector<string>*);
 
 
 void AI(MineSweeper* m, nlohmann::json*);
