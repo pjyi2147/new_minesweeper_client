@@ -5,4 +5,4 @@ Uses git submodule to use common minesweeper files with client and server as wel
 
 ## Usage 
 
-Boost Library and CMAKE is needed to build this project.
+Boost Library and CMAKE are needed to build this project.
